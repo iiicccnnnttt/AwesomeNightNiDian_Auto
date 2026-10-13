@@ -25,11 +25,14 @@
 <section class="card"><h2>执行结果</h2><pre id="result">尚无任务记录</pre></section>
 </main><dialog id="credentialDialog" style="width:440px;max-width:95vw;border:1px solid #dfe5ee;border-radius:14px;padding:24px"><h2>设置登录凭据 · <span id="credentialAccount"></span></h2><p class="muted">只写入或替换，不会回显已保存的账号密码。</p><form id="credentialForm"><p><label>学校账号 <input id="username" required maxlength="256" autocomplete="off"></label></p><p><label>学校密码 <input id="password" type="password" required maxlength="4096" autocomplete="new-password"></label></p><div class="bar"><button data-job type="submit">加密保存</button><button class="secondary" type="button" onclick="closeCredentials()">取消</button></div></form></dialog><script>
 const token='__RUN_TOKEN__';
+// Use the externally visible page directory, including an Nginx mount prefix.
+const appBase=new URL('./',window.location.href);
+const appUrl=path=>new URL(path.replace(/^\//,''),appBase).href;
 let current=null, accountSignature='', pending=false, monitorInteractive=false, monitorDismissed=false, credentialAccount=null;
 const byId=id=>document.getElementById(id);
 function toggleMonitor(show,interactive=monitorInteractive){
   byId('monitorCard').hidden=!show;monitorDismissed=!show;
-  if(show){const mode='true';const src='/monitor/vnc.html?autoconnect=true&resize=scale&view_only='+mode+'&path=websockify';
+  if(show){const mode='true';const query=new URLSearchParams({autoconnect:'true',resize:'scale',view_only:mode,host:window.location.hostname,port:window.location.port,encrypt:window.location.protocol==='https:'?'true':'false',path:appBase.pathname.slice(1)+'monitor/websockify'});const src=appUrl('monitor/vnc.html')+'?'+query;
     if(byId('monitor').getAttribute('src')!==src)byId('monitor').src=src;
     monitorInteractive=false;byId('monitorMode').textContent='服务器只读 · 任务观察';
     byId('monitorHelp').textContent='画面只读；GUI 登录测试通过下方控件填写验证码、确认验证或信任设备。账号密码仍加密保存；常规批量任务在后台认证。';
@@ -49,7 +52,7 @@ function renderAccounts(accounts,error){
  }
 }
 function disableControls(){const busy=pending||current?.running;document.querySelectorAll('[data-job],#addForm input,#accounts input').forEach(b=>b.disabled=busy);document.querySelectorAll('#accounts button').forEach(b=>{if(b.textContent!=='保存设置')b.disabled=busy;});byId('watch').disabled=busy||!current?.monitor_available;byId('showMonitor').disabled=!current?.monitor_available;}
-async function refresh(){try{const r=await fetch('/api/status');if(!r.ok)throw Error();const s=await r.json();current=s;
+async function refresh(){try{const r=await fetch(appUrl('api/status'));if(!r.ok)throw Error();const s=await r.json();current=s;
  byId('state').textContent=s.running?'正在执行 '+(s.account_id||s.operation):s.exit_code===null?'服务就绪':s.exit_code===0?'任务已完成':'任务存在失败或结果未知，请查看记录';
  if(!s.monitor_available)byId('watch').checked=false;
  renderVerification(s.verification);
@@ -60,7 +63,7 @@ async function refresh(){try{const r=await fetch('/api/status');if(!r.ok)throw E
  if(s.running&&s.monitored&&!monitorDismissed&&monitorInteractive!==s.awaiting_finish)toggleMonitor(true,s.awaiting_finish);
  byId('result').textContent=s.report?JSON.stringify(s.report,null,2):'尚无任务记录';disableControls();
  }catch(e){byId('message').textContent='无法连接服务，请检查容器状态。'}}
-async function api(path,value){pending=true;disableControls();byId('message').textContent='';let ok=false;try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Run-Token':token},body:JSON.stringify(value)});const data=await r.json();ok=r.ok;if(!ok)byId('message').textContent=data.error;else if(path==='/api/accounts/delete')byId('message').textContent='用户已删除。'+(data.profile_preserved?'外部导入的浏览器 profile 已保留。':'')+(data.cleanup_pending?'部分暂存数据清理失败，请管理员检查数据目录中的 .delete- 目录。':'');}catch(e){byId('message').textContent='请求状态未知，请检查执行记录后再操作。'}finally{pending=false;await refresh();}return ok;}
+async function api(path,value){pending=true;disableControls();byId('message').textContent='';let ok=false;try{const r=await fetch(appUrl(path),{method:'POST',headers:{'Content-Type':'application/json','X-Run-Token':token},body:JSON.stringify(value)});const data=await r.json();ok=r.ok;if(!ok)byId('message').textContent=data.error;else if(path==='/api/accounts/delete')byId('message').textContent='用户已删除。'+(data.profile_preserved?'外部导入的浏览器 profile 已保留。':'')+(data.cleanup_pending?'部分暂存数据清理失败，请管理员检查数据目录中的 .delete- 目录。':'');}catch(e){byId('message').textContent='请求状态未知，请检查执行记录后再操作。'}finally{pending=false;await refresh();}return ok;}
 async function run(operation){const monitor=byId('watch').checked;if(await api('/api/run',{operation,monitor})){if(monitor)toggleMonitor(true,false);}}
 async function setup(id,operation){const monitor=byId('watch').checked;if(await api('/api/setup',{id,operation,monitor})){if(monitor)toggleMonitor(true);}}
 async function deleteUser(id){

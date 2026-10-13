@@ -393,7 +393,9 @@ def handler_for(controller):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             if self.path == "/" and code == 200:
-                self.send_header("Set-Cookie", f"monitor_session={controller.token}; HttpOnly; SameSite=Strict; Path=/monitor/")
+                # Omit Path: the browser derives it from the external page URL.
+                # This works even when a proxy strips /auto/ before forwarding.
+                self.send_header("Set-Cookie", f"monitor_session={controller.token}; HttpOnly; SameSite=Strict")
             self.end_headers()
             self.wfile.write(body)
 

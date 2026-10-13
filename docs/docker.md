@@ -31,6 +31,37 @@ CHECKIN_SETUP_PORT=6080
 
 `CHECKIN_SETUP_PORT` 仅用于可选 `setup` profile；日常网页监视通过同源 `/monitor/`，无需单独映射 VNC 端口。服务默认启动 GUI 监视组件，定时批量任务使用无 GUI 模式。
 
+## Nginx 子路径反代
+
+支持在 `/auto/` 或其他以 `/` 结尾的子目录访问。网页按当前访问目录生成 API、监视资源及 WebSocket 地址，不需要额外配置服务端前缀，也不需要 `sub_filter` 或 Cookie 路径重写。
+
+将以下内容放进现有 `server {}`（完整示例见 `docker/nginx-auto.conf`）：
+
+```nginx
+location = /auto {
+    return 308 /auto/;
+}
+
+location /auto/ {
+    proxy_pass http://127.0.0.1:18080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+}
+```
+
+将上游端口替换为实际发布端口；Nginx 若也运行在容器中，`127.0.0.1` 指向 Nginx 容器，应改用同一 Docker 网络上的服务名（例如 `http://checkin:8080/`）。使用其他目录时同步修改两个 `location` 和跳转目标。保留 `proxy_pass` 末尾 `/`，将子路径剥离后转发给应用；外部地址须以 `/` 结尾，避免相对 URL 指向上一层。
+
+`Host $http_host` 保留访问端口，让 WebSocket 的同源校验正确；仅配置 `proxy_pass` 会导致监视连接失败。协议升级请求头须显式转发，参见 [Nginx WebSocket 官方说明](https://nginx.org/en/docs/http/websocket.html)。HTTPS 入口自动使用 `wss`。Nginx 的 HTTPS 与访问认证配置沿用现有站点；此段配置本身不提供用户认证。
+
+升级应用镜像并刷新网页后，执行 `nginx -t`，通过后由管理员 reload，再访问 `https://你的域名/auto/`。部署旧版时创建的 `/monitor/` Cookie 不适用于新子路径，重新打开首页即可获得新的 Cookie。API 会发往 `/auto/api/…`，监视资源及 WebSocket 发往 `/auto/monitor/…`；不要额外将它们暴露为站点根路由。
+
 ## 初始化用户与手动操作
 
 1. 在“用户配置”新增账号别名，点击“设置登录凭据”加密保存学校账号密码。表单只写入、不回显。

@@ -246,6 +246,13 @@ class ServiceTests(unittest.TestCase):
         from http.server import BaseHTTPRequestHandler
         class Backend(BaseHTTPRequestHandler):
             def do_GET(self):
+                if self.headers.get('Upgrade') == 'websocket':
+                    self.send_response(101)
+                    self.send_header('Upgrade', 'websocket')
+                    self.send_header('Connection', 'Upgrade')
+                    self.end_headers()
+                    self.close_connection = True
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
                 self.end_headers()
@@ -270,6 +277,7 @@ class ServiceTests(unittest.TestCase):
                 cookie = response.headers['Set-Cookie']
                 self.assertIn("HttpOnly", cookie)
                 self.assertIn("SameSite=Strict", cookie)
+                self.assertNotIn("Path=", cookie)
             with urlopen(Request(base + "/monitor/vnc.html", headers={"Cookie": cookie.split(';')[0]})) as response:
                 self.assertEqual(response.read(), b"monitor asset")
                 self.assertEqual(response.headers['X-Frame-Options'], 'SAMEORIGIN')
@@ -278,6 +286,13 @@ class ServiceTests(unittest.TestCase):
             response = connection.getresponse()
             self.assertEqual(response.status, 403)
             response.read()
+            connection.close()
+            connection = http.client.HTTPConnection('127.0.0.1', server.server_port)
+            connection.request('GET', '/monitor/websockify', headers={
+                'Cookie': cookie.split(';')[0], 'Upgrade': 'websocket',
+                'Origin': base, 'Sec-WebSocket-Key': 'fixture', 'Sec-WebSocket-Version': '13'})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 101)
             connection.close()
         finally:
             for item in (server, backend):
