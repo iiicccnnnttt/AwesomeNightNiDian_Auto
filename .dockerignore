@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!README.md
+!main.py
+!auto_location/
+!auto_location/**
+!docker/
+!docker/**
+auto_location/__pycache__/
+docker/__pycache__/

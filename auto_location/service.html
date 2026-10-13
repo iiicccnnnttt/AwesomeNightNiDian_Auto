@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>晚安成电 · 批量打卡</title>
+<style>
+:root{color-scheme:light}*{box-sizing:border-box}body{font:15px system-ui,sans-serif;background:#f3f5f9;color:#202a3a;margin:0;padding:28px}main{max-width:1180px;margin:auto}.card{background:white;border:1px solid #dfe5ee;border-radius:14px;padding:22px;margin:18px 0}h1{font-size:28px;margin-bottom:8px}h2{font-size:19px;margin:0 0 16px}.muted{color:#64748b;font-size:14px;line-height:1.6}.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}button{font:inherit;padding:10px 16px;border:0;border-radius:8px;background:#2259d7;color:white;cursor:pointer}button.secondary{background:#e9eef9;color:#244985}button:disabled{opacity:.5;cursor:not-allowed}input,select{font:inherit;border:1px solid #ccd5e3;border-radius:6px;padding:8px;max-width:100%}input[type=checkbox]{accent-color:#2259d7}label{display:inline-flex;gap:7px;align-items:center}#message{color:#923a1a;min-height:20px}.status{background:#e9f5ef;color:#246447;padding:5px 10px;border-radius:6px}table{border-collapse:collapse;width:100%;text-align:left}th,td{padding:13px 8px;border-bottom:1px solid #e5eaf2}th{font-size:13px;color:#64748b}td .bar{gap:6px}td button{font-size:13px;padding:7px 10px}.table-wrap{overflow-x:auto}td input[type=number]{width:74px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6fa;padding:16px;border-radius:8px;font-size:13px}iframe{width:100%;height:630px;border:1px solid #dfe5ee;border-radius:8px;background:#222}#monitorCard[hidden]{display:none}.help{padding:12px;background:#eef4ff;border-radius:8px;margin-bottom:12px}@media(max-width:700px){body{padding:12px}.card{padding:16px}iframe{height:430px}}
+</style></head>
+<body><main>
+<h1>晚安成电 · 批量打卡</h1><p class="muted">为启用账号随机排列顺序，逐个执行并核验结果。</p>
+<section class="card"><div class="bar"><strong id="state" class="status">读取状态中…</strong><label><input id="watch" type="checkbox" checked>监视本次浏览器操作</label></div><p id="message" role="alert"></p>
+<div class="bar"><button data-job onclick="run('checkin')">一键打卡</button><button data-job class="secondary" onclick="run('inspect')">检查所有账号</button><button data-job class="secondary" onclick="run('login')">登录所有账号</button></div>
+<p class="muted">已完成账号只核验；失败账号不会自动重试。开启监视后，操作将在下方可见浏览器中执行。</p></section>
+<section class="card"><h2>每日定时打卡</h2>
+<form id="scheduleForm" class="bar"><label><input id="scheduleEnabled" type="checkbox">启用无人值守</label><label>开始 <input id="scheduleStart" type="time" required value="21:00"></label><label>结束 <input id="scheduleEnd" type="time" required value="23:00"></label><button type="submit">保存定时设置</button></form>
+<p class="muted">北京时间（Asia/Shanghai），每天在 [开始, 结束) 内随机启动一次后台打卡，不支持跨午夜。首次验证请提前通过 GUI 登录测试完成。关闭定时不会中止已启动任务。</p>
+<p id="scheduleStatus" class="help">读取计划中…</p><details><summary>最近定时记录</summary><pre id="scheduleHistory"></pre></details></section>
+<section class="card" id="monitorCard" hidden><div class="bar"><h2 style="margin:0">浏览器监视</h2><span id="monitorMode" class="muted"></span><button class="secondary" onclick="toggleMonitor(false)">收起画面</button></div>
+<p id="monitorHelp" class="help">画面只读；GUI 登录测试可在下方完成二次验证。</p><div id="verification" hidden><p id="verificationStatus" class="muted"></p><div id="verificationControls" class="bar"></div><p class="bar"><button id="authContinue" class="secondary" onclick="continueVerification()">填写验证码并继续登录</button><button class="secondary" onclick="authAction({action:'cancel'})">结束登录调试</button></p></div><iframe id="monitor" title="Camoufox 实时浏览器画面"></iframe>
+</section>
+<section class="card"><div class="bar"><h2 style="margin:0">用户配置</h2><button id="showMonitor" class="secondary" onclick="toggleMonitor(true)">查看浏览器画面</button></div>
+<p class="muted">新增账号后，点击“设置登录凭据”输入学校账号和密码。凭据加密保存，仅可替换，不提供查看或导出；自动登录使用已保存的凭据。</p>
+<form id="addForm" class="bar"><input id="newId" placeholder="账号别名，如 account-a" aria-label="新账号别名" required pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,47}" maxlength="48"><button data-job type="submit">新增用户</button></form>
+<div class="table-wrap"><table><thead><tr><th>账号 / 凭据</th><th>启用</th><th>自动登录</th><th>区域序号</th><th>操作</th></tr></thead><tbody id="accounts"></tbody></table></div>
+<p class="muted">区域序号可留空；有多个允许区域时需设置从 0 开始的序号。首次登录请开启监视并测试自动登录，按画面完成二次验证并信任设备。关闭监视则在后台测试。登录测试复用会话，不清除设备信任信息。</p></section>
+<section class="card"><h2>执行结果</h2><pre id="result">尚无任务记录</pre></section>
+</main><dialog id="credentialDialog" style="width:440px;max-width:95vw;border:1px solid #dfe5ee;border-radius:14px;padding:24px"><h2>设置登录凭据 · <span id="credentialAccount"></span></h2><p class="muted">只写入或替换，不会回显已保存的账号密码。</p><form id="credentialForm"><p><label>学校账号 <input id="username" required maxlength="256" autocomplete="off"></label></p><p><label>学校密码 <input id="password" type="password" required maxlength="4096" autocomplete="new-password"></label></p><div class="bar"><button data-job type="submit">加密保存</button><button class="secondary" type="button" onclick="closeCredentials()">取消</button></div></form></dialog><script>
+const token='__RUN_TOKEN__';
+let current=null, accountSignature='', pending=false, monitorInteractive=false, monitorDismissed=false, credentialAccount=null;
+const byId=id=>document.getElementById(id);
+function toggleMonitor(show,interactive=monitorInteractive){
+  byId('monitorCard').hidden=!show;monitorDismissed=!show;
+  if(show){const mode='true';const src='/monitor/vnc.html?autoconnect=true&resize=scale&view_only='+mode+'&path=websockify';
+    if(byId('monitor').getAttribute('src')!==src)byId('monitor').src=src;
+    monitorInteractive=false;byId('monitorMode').textContent='服务器只读 · 任务观察';
+    byId('monitorHelp').textContent='画面只读；GUI 登录测试通过下方控件填写验证码、确认验证或信任设备。账号密码仍加密保存；常规批量任务在后台认证。';
+  }
+}
+function cell(row,child){const td=document.createElement('td');if(typeof child==='string')td.textContent=child;else td.append(child);row.append(td);return td;}
+function button(text,fn){const b=document.createElement('button');b.textContent=text;b.className='secondary';b.dataset.job='';b.onclick=fn;return b;}
+function renderAccounts(accounts,error){
+ const body=byId('accounts');body.replaceChildren();
+ if(!accounts.length){const tr=document.createElement('tr');const td=cell(tr,error||'尚未注册用户');td.colSpan=5;body.append(tr);return;}
+ for(const a of accounts){const tr=document.createElement('tr');const label=document.createElement('div');const name=document.createElement('strong');name.textContent=a.id;const meta=document.createElement('div');meta.className='muted';meta.textContent=a.credential_error||(a.saved_credentials?'已加密配置凭据':a.legacy_credentials?'旧浏览器凭据需重新配置':'尚未配置登录凭据');label.append(name,meta);cell(tr,label);
+ const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=a.enabled;enabled.setAttribute('aria-label',a.id+' 启用');cell(tr,enabled);
+ const auto=document.createElement('input');auto.type='checkbox';auto.checked=a.auto_login;auto.setAttribute('aria-label',a.id+' 自动登录');cell(tr,auto);
+ const area=document.createElement('input');area.type='number';area.min='0';area.step='1';area.value=a.area_index??'';area.placeholder='自动';area.setAttribute('aria-label',a.id+' 区域序号');cell(tr,area);
+ const actions=document.createElement('div');actions.className='bar';actions.append(button('保存设置',async()=>{const index=area.value===''?null:Number(area.value);if(index!==null&&(!Number.isInteger(index)||index<0)){byId('message').textContent='区域序号须为非负整数';return;}await api('/api/accounts',{id:a.id,enabled:enabled.checked,auto_login:auto.checked,area_index:index});}),button('设置登录凭据',()=>openCredentials(a.id)),button('测试自动登录',()=>setup(a.id,'test-login')),button('删除用户',()=>deleteUser(a.id)));
+ cell(tr,actions);body.append(tr);
+ }
+}
+function disableControls(){const busy=pending||current?.running;document.querySelectorAll('[data-job],#addForm input,#accounts input').forEach(b=>b.disabled=busy);document.querySelectorAll('#accounts button').forEach(b=>{if(b.textContent!=='保存设置')b.disabled=busy;});byId('watch').disabled=busy||!current?.monitor_available;byId('showMonitor').disabled=!current?.monitor_available;}
+async function refresh(){try{const r=await fetch('/api/status');if(!r.ok)throw Error();const s=await r.json();current=s;
+ byId('state').textContent=s.running?'正在执行 '+(s.account_id||s.operation):s.exit_code===null?'服务就绪':s.exit_code===0?'任务已完成':'任务存在失败或结果未知，请查看记录';
+ if(!s.monitor_available)byId('watch').checked=false;
+ renderVerification(s.verification);
+ renderSchedule(s.schedule);
+ const signature=JSON.stringify([s.accounts,s.account_error]);if(signature!==accountSignature){renderAccounts(s.accounts,s.account_error);accountSignature=signature;}
+
+ if(s.running&&s.monitored&&!monitorDismissed&&byId('monitorCard').hidden)toggleMonitor(true,s.awaiting_finish);
+ if(s.running&&s.monitored&&!monitorDismissed&&monitorInteractive!==s.awaiting_finish)toggleMonitor(true,s.awaiting_finish);
+ byId('result').textContent=s.report?JSON.stringify(s.report,null,2):'尚无任务记录';disableControls();
+ }catch(e){byId('message').textContent='无法连接服务，请检查容器状态。'}}
+async function api(path,value){pending=true;disableControls();byId('message').textContent='';let ok=false;try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Run-Token':token},body:JSON.stringify(value)});const data=await r.json();ok=r.ok;if(!ok)byId('message').textContent=data.error;else if(path==='/api/accounts/delete')byId('message').textContent='用户已删除。'+(data.profile_preserved?'外部导入的浏览器 profile 已保留。':'')+(data.cleanup_pending?'部分暂存数据清理失败，请管理员检查数据目录中的 .delete- 目录。':'');}catch(e){byId('message').textContent='请求状态未知，请检查执行记录后再操作。'}finally{pending=false;await refresh();}return ok;}
+async function run(operation){const monitor=byId('watch').checked;if(await api('/api/run',{operation,monitor})){if(monitor)toggleMonitor(true,false);}}
+async function setup(id,operation){const monitor=byId('watch').checked;if(await api('/api/setup',{id,operation,monitor})){if(monitor)toggleMonitor(true);}}
+async function deleteUser(id){
+ if(!confirm('删除用户“'+id+'”？\n将删除用户配置、加密凭据和服务管理的浏览器数据（含登录会话、设备信任及指纹）。\n外部导入的 profile 和历史执行记录保留。删除后重新添加须重新配置登录。'))return;
+ await api('/api/accounts/delete',{id});
+}
+let verificationSignature='';
+async function authAction(value){return await api('/api/auth/action',value);}
+async function continueVerification(){
+ const entries=[...byId('verificationControls').querySelectorAll('input[data-code-id]')].map(input=>({id:input.dataset.codeId,value:input.value})).filter(x=>x.value);
+ byId('verificationControls').querySelectorAll('input[data-code-id]').forEach(input=>input.value='');
+ for(const entry of entries){if(!await authAction({action:'control',id:entry.id,value:entry.value}))return;entry.value='';}
+ await authAction({action:'continue'});
+}
+function renderVerification(v){
+ byId('verification').hidden=!v||v.phase==='closed';if(!v)return;
+ byId('verificationStatus').textContent=v.error||(v.phase==='review'?'登录成功，画面保留两分钟；可提前结束调试。':v.phase==='verification'?'请按当前认证画面完成验证。':'正在登录，等待验证页面或登录结果。');
+ byId('authContinue').hidden=v.phase!=='verification';
+ const signature=JSON.stringify(v.controls);if(signature===verificationSignature)return;verificationSignature=signature;
+ const root=byId('verificationControls');const drafts=new Map([...root.querySelectorAll('input[data-code-id]')].map(input=>[input.dataset.codeId,input.value]));root.replaceChildren();
+ for(const c of v.controls){
+  if(c.kind==='code'){const label=document.createElement('label');label.textContent=c.label;const input=document.createElement('input');input.autocomplete='off';input.maxLength=128;input.dataset.codeId=c.id;input.value=drafts.get(c.id)||'';input.setAttribute('aria-label',c.label);const send=document.createElement('button');send.textContent='填写验证码';send.onclick=async()=>{let value=input.value;input.value='';await authAction({action:'control',id:c.id,value});value=null;};label.append(input);root.append(label,send);}
+  else if(c.kind==='trust'){const label=document.createElement('label');const input=document.createElement('input');input.type='checkbox';input.checked=!!c.checked;input.onchange=()=>authAction({action:'control',id:c.id,value:input.checked});label.append(input,document.createTextNode(c.label));root.append(label);}
+  else{const b=document.createElement('button');b.textContent=c.label;b.onclick=()=>authAction({action:'control',id:c.id});root.append(b);}
+ }
+}
+function openCredentials(id){credentialAccount=id;byId('credentialAccount').textContent=id;byId('credentialForm').reset();byId('credentialDialog').showModal();}
+function closeCredentials(){byId('credentialForm').reset();byId('credentialDialog').close();credentialAccount=null;}
+byId('credentialForm').onsubmit=async e=>{e.preventDefault();let value={id:credentialAccount,username:byId('username').value,password:byId('password').value};try{if(await api('/api/credentials',value)){closeCredentials();byId('message').textContent='凭据已加密保存。';}}finally{byId('password').value='';byId('username').value='';value=null;}};
+
+byId('addForm').onsubmit=async e=>{e.preventDefault();if(await api('/api/accounts',{id:byId('newId').value.trim()}))byId('newId').value='';};
+let scheduleSignature='';
+function renderSchedule(s){
+ if(!s)return;
+ const signature=JSON.stringify(s.config);
+ if(signature!==scheduleSignature){byId('scheduleEnabled').checked=s.config.enabled;byId('scheduleStart').value=s.config.start;byId('scheduleEnd').value=s.config.end;scheduleSignature=signature;}
+ const labels={pending:'等待计划时间',waiting:'等待其他任务释放',claimed:'已领取任务',running:'正在执行',completed:'已完成',failed:'失败，请检查结果',missed:'已错过时间段',interrupted:'重启中断，结果未知，请手动核验'};
+ byId('scheduleStatus').textContent=s.error||((s.config.enabled?'定时已启用':'定时已关闭')+' · 今日：'+(labels[s.today?.status]||'尚无计划')+' · 下次随机启动：'+(s.next_run||'暂无')+(s.today?.error?' · '+s.today.error:''));
+ byId('scheduleHistory').textContent=JSON.stringify(s.history,null,2);
+}
+byId('scheduleForm').onsubmit=async e=>{e.preventDefault();if(await api('/api/schedule',{enabled:byId('scheduleEnabled').checked,start:byId('scheduleStart').value,end:byId('scheduleEnd').value})){byId('message').textContent='定时设置已保存。';}};
+refresh();setInterval(refresh,2000);
+</script></body></html>

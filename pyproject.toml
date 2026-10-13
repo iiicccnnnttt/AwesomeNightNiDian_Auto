@@ -1,0 +1,11 @@
+[project]
+name = "auto-location"
+version = "0.1.0"
+description = "Camoufox location capture and verified UESTC check-in automation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "camoufox[geoip]>=0.5.8",
+    "cryptography>=46.0.0",
+    "tzdata>=2025.2",
+]

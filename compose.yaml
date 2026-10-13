@@ -1,0 +1,59 @@
+services:
+  checkin:
+    build:
+      context: .
+      args:
+        CAMOUFOX_VERSION: ${CAMOUFOX_VERSION:-}
+        CAMOUFOX_DOWNLOAD_PROXY: ${CAMOUFOX_DOWNLOAD_PROXY:-}
+    image: ${CHECKIN_IMAGE:-auto-location:local}
+    environment:
+      AUTO_LOCATION_GUI: "1"
+      AUTO_LOCATION_VAULT_KEY_FILE: /run/secrets/vault.key
+    ports:
+      - "127.0.0.1:${CHECKIN_HTTP_PORT:-8080}:8080"
+    volumes:
+      - checkin-state:/app/.state
+      - vault-key:/run/secrets:ro
+    shm_size: 1gb
+    restart: unless-stopped
+    stop_grace_period: 20s
+  cli:
+    image: ${CHECKIN_IMAGE:-auto-location:local}
+    profiles: [tools]
+    command: [account-list]
+    environment:
+      AUTO_LOCATION_VAULT_KEY_FILE: /run/secrets/vault.key
+    volumes:
+      - checkin-state:/app/.state
+      - vault-key:/run/secrets:ro
+    shm_size: 1gb
+    healthcheck:
+      disable: true
+  setup:
+    image: ${CHECKIN_IMAGE:-auto-location:local}
+    profiles: [setup]
+    environment:
+      AUTO_LOCATION_GUI: "1"
+      AUTO_LOCATION_VAULT_KEY_FILE: /run/secrets/vault.key
+    ports:
+      - "127.0.0.1:${CHECKIN_SETUP_PORT:-6080}:6080"
+    volumes:
+      - checkin-state:/app/.state
+      - vault-key:/run/secrets:ro
+    shm_size: 1gb
+    stdin_open: true
+    tty: true
+    healthcheck:
+      disable: true
+  vault-init:
+    image: ${CHECKIN_IMAGE:-auto-location:local}
+    profiles: [tools]
+    user: "0:0"
+    entrypoint: [python, /app/docker/init_vault_key.py]
+    volumes:
+      - vault-key:/run/secrets
+    healthcheck:
+      disable: true
+volumes:
+  checkin-state:
+  vault-key:

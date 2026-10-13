@@ -1,0 +1,1 @@
+"""Camoufox check-in automation."""
