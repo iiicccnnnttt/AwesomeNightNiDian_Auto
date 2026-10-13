@@ -1,8 +1,11 @@
 # 晚安成电自动打卡
 
+本项目完全由GPT-6.1-Sol完成，无任何人工参与。
+项目仅供学习交流，请勿用于其它用途。
+
 ## 使用指南
 
-- **Windows 单人打卡：** [打开图文使用说明](Windows使用说明.html)，也可查看 [Markdown 版](docs/windows-single-user.md)。说明涵盖首次登录、二次验证、前台观察、后台运行和 Windows 定时任务。
+- **Windows 单人打卡：** [打开 Windows 图文使用说明](docs/windows-single-user.md)。说明涵盖首次登录、二次验证、前台观察、后台运行和 Windows 定时任务。
 - **Docker 自动打卡：** [打开 Docker 部署与使用说明](docs/docker.md)。说明涵盖容器部署、多用户设置、网页操作和定时随机打卡。
 
 Windows 用户首次使用“单人登录初始化.cmd”完成加密凭据配置、登录验证和设备信任；之后可选择前台观察、后台打卡或 Windows 定时运行。Docker 用户通过网页配置账号，并可设置每日随机启动时间段。
